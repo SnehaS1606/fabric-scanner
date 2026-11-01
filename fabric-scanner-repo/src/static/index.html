@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fabric Scanner</title>
+<style>
+:root{
+  --bg:#f5f6f8; --card:#ffffff; --ink:#14181f; --muted:#5b6472; --line:#dfe3ea;
+  --accent:#2457d6; --accent-ink:#ffffff; --ok:#17803d; --warn:#b45309; --bad:#b42318; --bar:#2457d6; --barbg:#e8ecf3;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f1218; --card:#181c24; --ink:#eef1f6; --muted:#9aa4b5; --line:#2a303b;
+         --accent:#6b93ff; --accent-ink:#0b1020; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --bar:#6b93ff; --barbg:#262c38; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--card)}
+h1{font-size:20px;margin:0}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-size:13px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.chip.ok{color:var(--ok);border-color:var(--ok)} .chip.warn{color:var(--warn);border-color:var(--warn)}
+#mockBanner{display:none;background:var(--warn);color:#000;text-align:center;padding:8px;font-weight:600}
+main{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1200px;margin:0 auto;padding:16px}
+@media (max-width:860px){ main{grid-template-columns:1fr} }
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+h2{font-size:16px;margin:0 0 10px}
+.stage{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3}
+video{width:100%;height:100%;object-fit:cover;display:block}
+.reticle{position:absolute;inset:10%;border:3px dashed rgba(255,255,255,.7);border-radius:12px;pointer-events:none}
+#status{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;background:rgba(0,0,0,.65);color:#fff;font-size:18px;font-weight:600}
+#prog{position:absolute;left:0;bottom:0;height:5px;background:#4ade80;width:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+button,select,input[type=text]{font:inherit;color:var(--ink)}
+button{border:1px solid var(--line);background:var(--card);padding:10px 16px;border-radius:10px;cursor:pointer;min-height:44px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+select,input[type=text]{border:1px solid var(--line);background:var(--card);padding:9px 10px;border-radius:10px;min-height:44px}
+label.small{font-size:13px;color:var(--muted)}
+.muted{color:var(--muted);font-size:14px}
+#result{display:none}
+.big{font-size:30px;font-weight:700;line-height:1.2}
+.bars div.bar{display:grid;grid-template-columns:90px 1fr 54px;gap:8px;align-items:center;margin:5px 0;font-size:14px}
+.track{height:12px;background:var(--barbg);border-radius:6px;overflow:hidden}
+.fill{height:100%;background:var(--bar)}
+.imgs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.imgs figure{margin:0}.imgs img{width:100%;border-radius:8px;display:block;border:1px solid var(--line)}
+.imgs figcaption{font-size:12px;color:var(--muted);text-align:center}
+.note{margin-top:10px;padding:8px 10px;border-radius:8px;font-size:14px;border:1px solid var(--warn);color:var(--warn)}
+#log{max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.msg{padding:8px 12px;border-radius:12px;max-width:92%;font-size:15px}
+.msg.you{align-self:flex-end;background:var(--accent);color:var(--accent-ink)}
+.msg.bot{align-self:flex-start;background:var(--barbg)}
+.msg .meta{display:block;font-size:11px;opacity:.7;margin-top:2px}
+#micBtn.on{background:var(--bad);color:#fff;border-color:var(--bad)}
+.qchips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.qchips button{padding:6px 12px;min-height:36px;font-size:14px;border-radius:999px}
+#flash{display:none;position:fixed;inset:0;background:#fff;z-index:9999}
+footer{max-width:1200px;margin:0 auto;padding:0 16px 24px;color:var(--muted);font-size:13px}
+kbd{border:1px solid var(--line);border-radius:4px;padding:0 5px;background:var(--card)}
+</style>
+</head>
+<body>
+<div id="mockBanner">DEMO MODE: no model is loaded. Predictions are fake and for interface testing only.</div>
+<header>
+  <h1>Fabric Scanner</h1>
+  <div class="chips" aria-label="System status">
+    <span class="chip" id="chipCam">camera off</span>
+    <span class="chip" id="chipFlash">flash: -</span>
+    <span class="chip" id="chipVlm">vision model: -</span>
+  </div>
+</header>
+
+<main>
+  <section class="card" aria-labelledby="h-scan">
+    <h2 id="h-scan">1. Scan the fabric</h2>
+    <div class="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="reticle" id="reticle"></div>
+      <div id="status" role="status" aria-live="polite">Camera is off. Press "Start camera".</div>
+      <div id="prog"></div>
+    </div>
+    <div class="row">
+      <button id="camBtn" class="primary">Start camera</button>
+      <button id="scanBtn" disabled>Scan (hold steady) <kbd>S</kbd></button>
+      <button id="nowBtn" disabled>Capture now</button>
+      <button id="cancelBtn" disabled>Cancel</button>
+    </div>
+    <div class="row">
+      <label class="small">Zoom (crop)
+        <select id="zoomSel" aria-label="Zoom crop">
+          <option value="1">1x (whole frame)</option><option value="1.5">1.5x</option><option value="2" selected>2x</option><option value="3">3x</option>
+        </select></label>
+      <label class="small">Steady check
+        <select id="sensSel" aria-label="Steadiness sensitivity">
+          <option value="normal">Normal</option><option value="relaxed">Relaxed (handheld)</option><option value="strict">Strict (on a stand)</option>
+        </select></label>
+      <label class="small">Camera <select id="camSel" aria-label="Camera"></select></label>
+      <label class="small">Flash
+        <select id="flashSel" aria-label="Flash mode">
+          <option value="auto">Auto (torch if available, else screen)</option>
+          <option value="torch">Phone torch</option>
+          <option value="screen">Screen flash</option>
+        </select></label>
+    </div>
+    <p class="muted">Hold the fabric as close as the camera stays sharp, so the weave fills the dashed frame (the zoom setting crops to that frame). When the picture is steady, the app takes one photo with the room light and one with the flash. If it never settles, it captures anyway after 8 seconds, or press Capture now.</p>
+    <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+    <h2>Or scan a dataset sample (reliable demo)</h2>
+    <div class="row" style="margin-top:0">
+      <select id="sampleCls" aria-label="Sample class"><option value="">Random class</option></select>
+      <button id="sampleBtn">Scan a dataset sample</button>
+    </div>
+  </section>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <section class="card" id="result" aria-labelledby="h-res">
+      <h2 id="h-res">2. Result</h2>
+      <div class="big" id="topLabel"></div>
+      <div class="muted" id="topConf"></div>
+      <div class="bars" id="bars" style="margin-top:10px"></div>
+      <div class="imgs">
+        <figure><img id="imgOff" alt="Photo without flash"><figcaption>Room light</figcaption></figure>
+        <figure><img id="imgOn" alt="Photo with flash"><figcaption>With flash</figcaption></figure>
+        <figure><img id="imgDiff" alt="Sheen difference map"><figcaption>Sheen map</figcaption></figure>
+      </div>
+      <div class="note" id="warn" style="display:none"></div>
+      <div class="muted" id="resMeta" style="margin-top:8px"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-q">
+      <h2 id="h-q">3. Ask about this fabric</h2>
+      <div id="log" aria-live="polite"><div class="muted" id="logEmpty">Scan a fabric, then ask a question by voice or text.</div></div>
+      <div class="qchips" id="qchips">
+        <button>Is this good for summer?</button><button>Is it good for winter?</button>
+        <button>Is it durable?</button><button>How do I wash it?</button>
+        <button>What colour is it?</button><button>Is it breathable?</button>
+      </div>
+      <div class="row" style="margin-top:0">
+        <button id="micBtn" disabled>Ask by voice <kbd>M</kbd></button>
+        <input type="text" id="qText" placeholder="Or type a question" aria-label="Type a question" style="flex:1;min-width:150px" disabled>
+        <button id="askBtn" disabled>Ask</button>
+        <button id="repeatBtn" disabled>Repeat <kbd>R</kbd></button>
+      </div>
+      <div class="muted" id="lat" style="margin-top:8px"></div>
+      <p class="muted">Voice: speak after the beep. Say "done" to stop. Press <kbd>M</kbd> again to stop listening.</p>
+    </section>
+  </div>
+</main>
+<footer>Keyboard: <kbd>S</kbd> scan, <kbd>M</kbd> ask by voice, <kbd>R</kbd> repeat last answer. Answers are spoken aloud. Live-capture accuracy has not been validated; the classifier was trained on close-up dataset images.</footer>
+<div id="flash" aria-hidden="true"></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const EXIT = /\b(done|quit|exit|stop|new fabric|next fabric)\b/i;
+const HOLD_MS = 1200, BRIGHT_MIN = 30, SHARP_MIN = 2, SCAN_TIMEOUT_MS = 40000, FALLBACK_MS = 8000;
+// movement limit on a 32x24 block-averaged picture (noise is averaged away; real movement is not)
+const SENS = {strict: 3, normal: 6, relaxed: 12};
+
+let stream = null, track = null, torchOK = false;
+let sid = null, lastAnswer = "", scanning = false, cancelScan = false;
+let convActive = false, abortRec = false, micStream = null, audioCtx = null;
+
+// ---------- speech out
+let voice = null;
+function pickVoice(){
+  if(!("speechSynthesis" in window)) return;
+  const v = speechSynthesis.getVoices();
+  voice = v.find(x => /en[-_](US|GB|IN)/i.test(x.lang)) || v.find(x => /^en/i.test(x.lang)) || null;
+}
+if("speechSynthesis" in window){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function say(text){
+  return new Promise(resolve => {
+    if(!("speechSynthesis" in window)){ resolve(); return; }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if(voice) u.voice = voice;
+    u.rate = 1.0;
+    let done = false;
+    const fin = () => { if(!done){ done = true; resolve(); } };
+    u.onend = fin; u.onerror = fin;
+    setTimeout(fin, 2000 + text.length * 90);        // safety net: some browsers never fire onend
+    speechSynthesis.speak(u);
+  });
+}
+function beep(freq = 880, ms = 120){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.frequency.value = freq; g.gain.value = 0.15;
+    o.connect(g); g.connect(audioCtx.destination); o.start();
+    setTimeout(() => o.stop(), ms);
+  }catch(e){}
+}
+
+// ---------- status
+function setStatus(t, p){ $("status").textContent = t; if(p !== undefined) $("prog").style.width = (p * 100) + "%"; }
+async function refreshStatus(){
+  try{
+    const s = await (await fetch("/api/status")).json();
+    $("mockBanner").style.display = s.mock ? "block" : "none";
+    const v = $("chipVlm");
+    const map = {ready:["vision model: ready","ok"], loading:["vision model: loading...","warn"],
+                 off:["vision model: off","warn"], failed:["vision model: failed","warn"]};
+    const m = map[s.vlm] || ["vision model: -", ""];
+    v.textContent = m[0]; v.className = "chip " + m[1];
+    const sel = $("sampleCls");
+    if(sel.options.length === 1){
+      for(const [c, n] of Object.entries(s.sample_counts)){
+        const o = document.createElement("option"); o.value = c; o.textContent = `${c} (${n})`; sel.appendChild(o);
+      }
+    }
+    return s;
+  }catch(e){ return null; }
+}
+(async function poll(){ const s = await refreshStatus(); setTimeout(poll, s && s.vlm === "loading" ? 3000 : 15000); })();
+
+// ---------- camera
+async function startCamera(deviceId){
+  stopCamera();
+  const video = deviceId ? {deviceId:{exact:deviceId}, width:{ideal:1280}, height:{ideal:720}}
+                         : {facingMode:{ideal:"environment"}, width:{ideal:1280}, height:{ideal:720}};
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video, audio:false});
+  }catch(e){
+    setStatus("Camera blocked or unavailable: " + e.name + ". Allow camera access in the browser address bar.", 0);
+    return;
+  }
+  track = stream.getVideoTracks()[0];
+  $("video").srcObject = stream;
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  torchOK = !!caps.torch;
+  const st = track.getSettings();
+  $("chipCam").textContent = "camera on " + (st.width && st.height ? st.width + "x" + st.height : ""); $("chipCam").className = "chip ok";
+  $("chipFlash").textContent = "flash: " + (torchOK ? "torch available" : "screen");
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+  const sel = $("camSel"); sel.innerHTML = "";
+  devs.forEach((d, i) => { const o = document.createElement("option"); o.value = d.deviceId; o.textContent = d.label || ("Camera " + (i + 1)); sel.appendChild(o); });
+  const cur = track.getSettings().deviceId; if(cur) sel.value = cur;
+  $("scanBtn").disabled = $("nowBtn").disabled = false;
+  $("camBtn").textContent = "Stop camera";
+  setStatus("Camera ready. Press Scan.", 0);
+}
+function stopCamera(){
+  if(stream){ stream.getTracks().forEach(t => t.stop()); }
+  stream = track = null; $("video").srcObject = null;
+  $("chipCam").textContent = "camera off"; $("chipCam").className = "chip";
+  $("scanBtn").disabled = $("nowBtn").disabled = true;
+  $("camBtn").textContent = "Start camera";
+}
+$("camBtn").onclick = () => stream ? (stopCamera(), setStatus("Camera is off.", 0)) : startCamera();
+$("camSel").onchange = e => startCamera(e.target.value);
+
+function updateReticle(){
+  const z = parseFloat($("zoomSel").value) || 1;               // stage is 4:3; capture is a centred square of height/z
+  const v = (1 - 1 / z) / 2 * 100, h = (1 - 0.75 / z) / 2 * 100;
+  $("reticle").style.inset = `${v.toFixed(1)}% ${h.toFixed(1)}%`;
+}
+$("zoomSel").onchange = updateReticle; updateReticle();
+
+// ---------- frame helpers
+const small = document.createElement("canvas"); small.width = 128; small.height = 96;
+const sctx = small.getContext("2d", {willReadFrequently:true});
+function sampleFrame(){
+  const v = $("video"); if(!v.videoWidth) return null;
+  sctx.drawImage(v, 0, 0, 128, 96);
+  const d = sctx.getImageData(0, 0, 128, 96).data, n = 128 * 96, g = new Float32Array(n);
+  let sum = 0;
+  for(let i = 0; i < n; i++){ g[i] = 0.299 * d[i*4] + 0.587 * d[i*4+1] + 0.114 * d[i*4+2]; sum += g[i]; }
+  // sharpness = variance of a 4-neighbour Laplacian
+  let s1 = 0, s2 = 0, c = 0;
+  for(let y = 1; y < 95; y++) for(let x = 1; x < 127; x++){
+    const i = y * 128 + x, l = 4 * g[i] - g[i-1] - g[i+1] - g[i-128] - g[i+128];
+    s1 += l; s2 += l * l; c++;
+  }
+  const coarse = new Float32Array(32 * 24);                      // 4x4 block means: cancels sensor noise
+  for(let y = 0; y < 96; y++) for(let x = 0; x < 128; x++) coarse[(y >> 2) * 32 + (x >> 2)] += g[y * 128 + x] / 16;
+  return {g, coarse, mean: sum / n, sharp: s2 / c - (s1 / c) ** 2};
+}
+function grabFrame(){
+  const v = $("video"), z = parseFloat($("zoomSel").value) || 1;
+  const side = Math.round(Math.min(v.videoWidth, v.videoHeight) / z), out = Math.min(side, 640);
+  const c = document.createElement("canvas"); c.width = c.height = out;
+  c.getContext("2d").drawImage(v, (v.videoWidth - side) / 2, (v.videoHeight - side) / 2, side, side, 0, 0, out, out);
+  return new Promise(res => c.toBlob(res, "image/jpeg", 0.92));
+}
+
+// ---------- flash
+function flashMode(){
+  const m = $("flashSel").value;
+  return m === "auto" ? (torchOK ? "torch" : "screen") : (m === "torch" && !torchOK ? "screen" : m);
+}
+async function flashOn(mode){
+  if(mode === "torch"){ await track.applyConstraints({advanced:[{torch:true}]}); await sleep(600); }
+  else { $("flash").style.display = "block"; await sleep(750); }
+}
+async function flashOff(mode){
+  if(mode === "torch"){ try{ await track.applyConstraints({advanced:[{torch:false}]}); }catch(e){} }
+  $("flash").style.display = "none";
+}
+
+// ---------- scanning with hold-steady trigger
+function setScanning(on){
+  scanning = on; $("cancelBtn").disabled = !on;
+  $("scanBtn").disabled = on || !stream; $("nowBtn").disabled = on || !stream; $("sampleBtn").disabled = on;
+}
+async function autoScan(){
+  if(!stream || scanning) return;
+  setScanning(true); cancelScan = false;
+  say("Hold the fabric steady, close to the camera.");
+  const limit = SENS[$("sensSel").value] || SENS.normal;
+  let prev = null, steadyStart = null, lastHint = "", lastAdvice = "", lastSpoken = 0, smooth = null;
+  const t0 = performance.now();
+  while(!cancelScan){
+    const elapsed = performance.now() - t0;
+    if(elapsed > SCAN_TIMEOUT_MS){ setStatus("No picture. Scan cancelled.", 0); say("I could not get a picture. Please try again."); setScanning(false); return; }
+    const f = sampleFrame();
+    if(f){
+      let motion = null;
+      if(prev){ let s = 0; for(let i = 0; i < f.coarse.length; i++) s += Math.abs(f.coarse[i] - prev[i]); motion = s / f.coarse.length; }
+      prev = f.coarse;
+      if(motion !== null) smooth = smooth === null ? motion : 0.6 * smooth + 0.4 * motion;
+      const mtxt = smooth === null ? "" : ` (movement ${smooth.toFixed(1)}, need under ${limit})`;
+      // Only movement (or a covered lens) blocks the scan. Dim or soft pictures just get advice,
+      // because fabric held very close is naturally darker and softer.
+      let advice = "";
+      if(f.mean < BRIGHT_MIN) advice = " Picture is dim: more light helps.";
+      else if(f.sharp < SHARP_MIN) advice = " Picture is soft: move back a little if it is blurry.";
+      let hint = null;
+      if(f.mean < 8) hint = "The camera looks covered. Move the fabric back a little.";
+      else if(smooth !== null && smooth > limit) hint = "Hold steady..." + mtxt;
+      if(advice && advice !== lastAdvice && performance.now() - lastSpoken > 4000){ say(advice.trim()); lastSpoken = performance.now(); lastAdvice = advice; }
+      if(hint){
+        steadyStart = null; setStatus(hint + advice, 0);
+        const key = hint.split("(")[0];
+        if(key !== lastHint && performance.now() - lastSpoken > 3500 && !key.startsWith("Hold")){ say(hint); lastSpoken = performance.now(); }
+        lastHint = key;
+        if(elapsed > FALLBACK_MS && f.mean >= 8){                 // never stay stuck: take the picture anyway
+          setStatus("Capturing now...", 1); await say("Capturing now."); await capture(); return;
+        }
+      } else {
+        steadyStart = steadyStart || performance.now();
+        const held = performance.now() - steadyStart;
+        setStatus("Steady. Keep holding... " + (held / 1000).toFixed(1) + " s" + mtxt + advice, Math.min(held / HOLD_MS, 1));
+        if(held >= HOLD_MS){ await capture(); return; }
+      }
+    }
+    await sleep(100);
+  }
+  setStatus("Scan cancelled.", 0); setScanning(false);
+}
+async function capture(){
+  setScanning(true);
+  const mode = flashMode();
+  try{
+    beep(880, 120); setStatus("Scanning. Keep still...", 1);
+    const off = await grabFrame();
+    await flashOn(mode);
+    const on = await grabFrame();
+    await flashOff(mode);
+    beep(1175, 150);
+    setStatus("Analysing...", 1);
+    const fd = new FormData(); fd.append("off", off, "off.jpg"); fd.append("on", on, "on.jpg"); fd.append("flash_mode", mode);
+    const r = await fetch("/api/scan", {method:"POST", body:fd});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error || "scan failed");
+    await showResult(j);
+  }catch(e){
+    await flashOff(mode);
+    setStatus("Scan failed: " + e.message, 0); say("The scan failed. Please try again.");
+  }finally{ setScanning(false); }
+}
+$("scanBtn").onclick = autoScan;
+$("nowBtn").onclick = () => { if(stream && !scanning) capture(); };
+$("cancelBtn").onclick = () => { cancelScan = true; };
+
+$("sampleBtn").onclick = async () => {
+  if(scanning) return;
+  setScanning(true); setStatus("Loading dataset sample...", 1);
+  try{
+    const r = await fetch("/api/scan_sample", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({cls:$("sampleCls").value})});
+    const j = await r.json(); if(!r.ok) throw new Error(j.error);
+    await showResult(j);
+  }catch(e){ setStatus("Failed: " + e.message, 0); }
+  finally{ setScanning(false); }
+};
+
+// ---------- result
+async function showResult(j){
+  sid = j.sid; convActive = false; abortRec = true;
+  $("result").style.display = "block";
+  $("topLabel").textContent = j.top;
+  $("topConf").textContent = "Confidence " + (j.confidence * 100).toFixed(0) + "%";
+  $("bars").innerHTML = j.probs.map(p =>
+    `<div class="bar"><span>${p.label}</span><div class="track"><div class="fill" style="width:${(p.p*100).toFixed(1)}%"></div></div><span>${(p.p*100).toFixed(1)}%</span></div>`).join("");
+  $("imgOff").src = j.images.off; $("imgOn").src = j.images.on; $("imgDiff").src = j.images.diff;
+  const w = $("warn"); w.style.display = j.warning ? "block" : "none"; w.textContent = j.warning || "";
+  let meta = `Scan time ${j.scan_seconds}s, flash effect ${j.flash_effect}`;
+  if(j.source === "dataset") meta += ` | dataset sample ${j.actual}/${j.sample_id}: ` + (j.actual === j.top ? "correct" : "WRONG (actual " + j.actual + ")");
+  $("resMeta").textContent = meta;
+  setStatus(j.message, 0);
+  ["micBtn","askBtn","repeatBtn"].forEach(id => $(id).disabled = false); $("qText").disabled = false;
+  $("log").innerHTML = ""; lastAnswer = j.message;
+  document.getElementById("result").scrollIntoView({behavior:"smooth", block:"nearest"});
+  await say(j.message + (j.warning ? " " + j.warning : "") + " Ask me a question, or press M to speak.");
+  converse();
+}
+
+// ---------- Q and A
+function addMsg(kind, text, meta){
+  const d = document.createElement("div"); d.className = "msg " + kind; d.textContent = text;
+  if(meta){ const m = document.createElement("span"); m.className = "meta"; m.textContent = meta; d.appendChild(m); }
+  $("log").appendChild(d); $("log").scrollTop = $("log").scrollHeight;
+}
+async function ask(q, sttSeconds){
+  if(!sid || !q) return;
+  addMsg("you", q);
+  const think = document.createElement("div"); think.className = "msg bot"; think.textContent = "Thinking...";
+  $("log").appendChild(think); $("log").scrollTop = $("log").scrollHeight;
+  try{
+    const r = await fetch("/api/ask", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({sid, question:q, stt_seconds:sttSeconds ?? ""})});
+    const j = await r.json(); if(!r.ok) throw new Error(j.error);
+    think.remove();
+    lastAnswer = j.answer; addMsg("bot", j.answer, j.route + " | " + j.answer_seconds + "s");
+    $("lat").textContent = `Last answer: ${j.route}, ${j.answer_seconds}s` + (sttSeconds ? `, speech recognition ${sttSeconds}s` : "");
+    await say(j.answer);
+  }catch(e){ think.remove(); addMsg("bot", "Error: " + e.message); await say("Sorry, something went wrong."); }
+}
+$("askBtn").onclick = () => { const q = $("qText").value.trim(); if(q){ $("qText").value = ""; ask(q); } };
+$("qText").onkeydown = e => { if(e.key === "Enter") $("askBtn").click(); };
+$("qchips").onclick = e => { if(e.target.tagName === "BUTTON" && sid) ask(e.target.textContent); };
+$("repeatBtn").onclick = () => lastAnswer && say(lastAnswer);
+
+// ---------- microphone: record until silence
+async function getMic(){
+  if(micStream && micStream.active) return micStream;
+  micStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1}});
+  return micStream;
+}
+async function recordUntilSilence(){
+  const ms = await getMic();
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  if(audioCtx.state === "suspended") await audioCtx.resume();
+  const src = audioCtx.createMediaStreamSource(ms), an = audioCtx.createAnalyser(); an.fftSize = 1024;
+  src.connect(an);
+  const buf = new Float32Array(an.fftSize);
+  const mime = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/mp4"].find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
+  const rec = new MediaRecorder(ms, mime ? {mimeType:mime} : undefined), chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  const stopped = new Promise(r => rec.onstop = r);
+  abortRec = false; rec.start(100);
+  beep(660, 100); $("micBtn").classList.add("on"); $("micBtn").textContent = "Listening... (press M to stop)";
+  setStatus("Listening. Speak your question.", 0);
+  const t0 = performance.now(); let floor = null, started = false, quietSince = null, calib = [];
+  while(!abortRec){
+    an.getFloatTimeDomainData(buf);
+    let s = 0; for(const v of buf) s += v * v; const rms = Math.sqrt(s / buf.length);
+    const t = performance.now() - t0;
+    if(t < 400){ calib.push(rms); }
+    else {
+      if(floor === null) floor = calib.reduce((a, b) => a + b, 0) / calib.length;
+      const thr = Math.max(0.02, floor * 3);
+      if(rms > thr){ started = true; quietSince = null; }
+      else if(started){ quietSince = quietSince || performance.now(); if(performance.now() - quietSince > 1000) break; }
+    }
+    if(!started && t > 7000) break;
+    if(t > 12000) break;
+    await sleep(50);
+  }
+  rec.stop(); await stopped; src.disconnect();
+  $("micBtn").classList.remove("on"); $("micBtn").innerHTML = "Ask by voice <kbd>M</kbd>";
+  if(abortRec || !started) return null;
+  return new Blob(chunks, {type: rec.mimeType || "audio/webm"});
+}
+async function transcribe(blob){
+  const fd = new FormData(); fd.append("audio", blob, "q.webm");
+  const r = await fetch("/api/transcribe", {method:"POST", body:fd}); const j = await r.json();
+  if(!r.ok) throw new Error(j.error); return j;
+}
+async function converse(){
+  if(convActive || !sid) return;
+  convActive = true; let silent = 0; const mySid = sid;
+  try{
+    while(convActive && sid === mySid){
+      await sleep(600);                               // let the room echo die down
+      const blob = await recordUntilSilence();
+      if(!convActive || sid !== mySid) break;
+      if(!blob){
+        if(++silent >= 2){ setStatus("No speech heard. Press M to talk again.", 0); await say("I couldn't hear you. Press M when you want to ask something."); break; }
+        await say("I didn't hear anything. Please try again."); continue;
+      }
+      silent = 0; setStatus("Understanding...", 0);
+      const t = await transcribe(blob);
+      if(!t.text){ await say("Sorry, I didn't catch that."); continue; }
+      if(EXIT.test(t.text)){ addMsg("you", t.text); await say("Okay. Press S to scan another fabric."); break; }
+      await ask(t.text, t.stt_seconds);
+    }
+  }catch(e){
+    const msg = String(e.message || e);
+    if(e.name === "NotAllowedError" || /permission/i.test(msg)){
+      addMsg("bot", "Microphone access was blocked or dismissed. Click the lock icon left of the address bar, set Microphone to Allow, reload the page, then press M. You can still type questions.");
+      setStatus("Microphone not allowed. Allow it in the address bar, reload, then press M.", 0);
+      await say("Microphone access is blocked. Please allow the microphone in the browser, then reload the page.");
+    } else {
+      addMsg("bot", "Microphone problem: " + msg);
+      setStatus("Microphone problem. You can still type your question.", 0);
+    }
+  }finally{
+    convActive = false; $("micBtn").classList.remove("on"); $("micBtn").innerHTML = "Ask by voice <kbd>M</kbd>";
+  }
+}
+$("micBtn").onclick = () => { if(!sid) return; if(convActive){ convActive = false; abortRec = true; } else converse(); };
+
+document.addEventListener("keydown", e => {
+  if(e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if(k === "s") autoScan(); else if(k === "m") $("micBtn").click(); else if(k === "r") $("repeatBtn").click();
+});
+window.addEventListener("beforeunload", () => { if("speechSynthesis" in window) speechSynthesis.cancel(); });
+</script>
+</body>
+</html>

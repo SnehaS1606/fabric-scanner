@@ -1,0 +1,14 @@
+torch
+torchvision
+opencv-python
+numpy
+pywavelets
+scikit-learn
+scipy
+pillow
+flask
+openai-whisper
+transformers
+# only for the older terminal app (src/app.py)
+sounddevice
+pyttsx3

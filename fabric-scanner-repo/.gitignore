@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pt
+*.pth
+captures/
+latency_log.csv
+ckpt_*/
+.venv/
+venv/
+.idea/
+.vscode/
+*.log
+archive/
+data/
